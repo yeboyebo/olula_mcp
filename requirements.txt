@@ -1,0 +1,6 @@
+fastapi
+uvicorn[standard]
+fastmcp
+requests
+types-requests
+python-dotenv
