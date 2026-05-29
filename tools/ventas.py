@@ -61,7 +61,7 @@ def crear_cliente(nombre: str, id_fiscal: str, tipo_id_fiscal: str = "NIF", empr
         email: Email del cliente
         telefono1: Teléfono del cliente
     """
-    body: dict = {"nombre": nombre, "id_fiscal": {"id": id_fiscal, "tipo": tipo_id_fiscal}}
+    body: dict = {"nombre": nombre, "id_fiscal":  id_fiscal, "tipo_id_fiscal": tipo_id_fiscal}
     if empresa_id:
         body["empresa_id"] = empresa_id
     if agente_id:

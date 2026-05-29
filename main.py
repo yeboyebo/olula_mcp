@@ -3,7 +3,8 @@ import contextlib
 import argparse
 
 from starlette.applications import Starlette
-from starlette.routing import Mount
+from starlette.responses import JSONResponse
+from starlette.routing import Mount, Route
 from starlette.types import ASGIApp, Receive, Scope, Send
 import uvicorn
 
@@ -31,6 +32,10 @@ class AuthForwardMiddleware:
                 set_request_headers(None)
 
 
+async def _health_handler(request):
+    return JSONResponse({"status": "ok"})
+
+
 def _build_http_app() -> ASGIApp:
     sse_app = mcp.sse_app()
     streamable_app = mcp.streamable_http_app()
@@ -41,6 +46,7 @@ def _build_http_app() -> ASGIApp:
             yield
 
     routes = [
+        Route("/health", _health_handler, methods=["GET"]),
         Mount("/", app=sse_app),
         Mount("/", app=streamable_app),
     ]
