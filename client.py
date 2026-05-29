@@ -55,6 +55,20 @@ def api_get(path: str, params: dict | None = None) -> dict | list:
     return data.get("datos", data)
 
 
+def api_get_one(path: str, params: dict | None = None) -> dict:
+    result = api_get(path, params)
+    if not isinstance(result, dict):
+        raise ValueError(f"Expected dict from {path}, got {type(result).__name__}")
+    return result
+
+
+def api_get_many(path: str, params: dict | None = None) -> list[dict]:
+    result = api_get(path, params)
+    if not isinstance(result, list):
+        raise ValueError(f"Expected list from {path}, got {type(result).__name__}")
+    return result
+
+
 def api_post(path: str, body: dict | None = None) -> dict:
     response = requests.post(f"{API_HOST}{path}", json=body, headers=_headers())
     response.raise_for_status()

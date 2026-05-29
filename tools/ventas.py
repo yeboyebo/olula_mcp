@@ -1,6 +1,38 @@
 from server import mcp
-from client import api_get, api_post, api_patch, build_query
+from client import api_get_one, api_get_many, api_post, api_patch, build_query
 
+
+# ── Clientes ──────────────────────────────────────────────────────────────
+
+@mcp.tool()
+def buscar_articulo(descripcion: str | None = None, sku: str | None = None, pagina: int = 1, limite: int = 100) -> list[dict]:
+    """
+    Busca artículos por descripción y/o SKU.
+
+    Args:
+        descripcion: Filtrar por descripción (parcial)
+        sku: Filtrar por SKU (parcial)
+        pagina: Número de página
+        limite: Resultados por página (máximo 100)
+    """
+    filtro = []
+    if descripcion:
+        filtro.append(["descripcion", "~", descripcion])
+    if sku:
+        filtro.append(["id", "~", sku])
+    q = build_query(filtro or None, pagina=pagina, limite=limite)
+    return api_get_many("/ventas/articulo", params={"q": q})
+
+
+@mcp.tool()
+def obtener_articulo(articulo_id: str) -> dict:
+    """
+    Obtiene un artículo por su ID/SKU.
+
+    Args:
+        articulo_id: ID del artículo
+    """
+    return api_get_one(f"/ventas/articulo/{articulo_id}")
 
 # ── Clientes ──────────────────────────────────────────────────────────────
 
@@ -22,7 +54,7 @@ def buscar_cliente(nombre: str | None = None, email: str | None = None, pagina: 
     if email:
         filtro.append(["email", "~", email])
     q = build_query(filtro or None, pagina=pagina, limite=limite)
-    return api_get("/ventas/cliente", params={"q": q})
+    return api_get_many("/ventas/cliente", params={"q": q})
 
 
 @mcp.tool()
@@ -33,7 +65,7 @@ def obtener_cliente(cliente_id: str) -> dict:
     Args:
         cliente_id: ID del cliente
     """
-    return api_get(f"/ventas/cliente/{cliente_id}")
+    return api_get_one(f"/ventas/cliente/{cliente_id}")
 
 
 @mcp.tool()
@@ -44,7 +76,7 @@ def buscar_cliente_por_email(email: str) -> dict:
     Args:
         email: Email del cliente
     """
-    return api_get(f"/ventas/cliente/email/{email}")
+    return api_get_one(f"/ventas/cliente/email/{email}")
 
 
 @mcp.tool()
@@ -61,7 +93,8 @@ def crear_cliente(nombre: str, id_fiscal: str, tipo_id_fiscal: str = "NIF", empr
         email: Email del cliente
         telefono1: Teléfono del cliente
     """
-    body: dict = {"nombre": nombre, "id_fiscal":  id_fiscal, "tipo_id_fiscal": tipo_id_fiscal}
+    body: dict = {"nombre": nombre, "id_fiscal":  id_fiscal,
+                  "tipo_id_fiscal": tipo_id_fiscal}
     if empresa_id:
         body["empresa_id"] = empresa_id
     if agente_id:
@@ -114,7 +147,7 @@ def buscar_presupuesto(pagina: int = 1, limite: int = 100, cliente_id: str | Non
     if cliente_id:
         filtro.append(["cliente_id", "=", cliente_id])
     q = build_query(filtro or None, pagina=pagina, limite=limite)
-    return api_get("/ventas/presupuesto", params={"q": q})
+    return api_get_many("/ventas/presupuesto", params={"q": q})
 
 
 @mcp.tool()
@@ -125,7 +158,7 @@ def obtener_presupuesto(presupuesto_id: str) -> dict:
     Args:
         presupuesto_id: ID del presupuesto
     """
-    return api_get(f"/ventas/presupuesto/{presupuesto_id}")
+    return api_get_one(f"/ventas/presupuesto/{presupuesto_id}")
 
 
 @mcp.tool()
@@ -140,7 +173,8 @@ def crear_presupuesto(empresa_id: str, cliente: dict, lineas: list[dict]) -> dic
         cliente: Datos del cliente (ver formatos arriba)
         lineas: Lista de líneas [{"articulo_id": "...", "cantidad": N}, ...]
     """
-    body: dict = {"empresa_id": empresa_id, "cliente": cliente, "lineas": lineas}
+    body: dict = {"empresa_id": empresa_id,
+                  "cliente": cliente, "lineas": lineas}
     return api_post("/ventas/presupuesto", body=body)
 
 
@@ -172,7 +206,7 @@ def buscar_pedido(pagina: int = 1, limite: int = 100, cliente_id: str | None = N
     if cliente_id:
         filtro.append(["cliente_id", "=", cliente_id])
     q = build_query(filtro or None, pagina=pagina, limite=limite)
-    return api_get("/ventas/pedido", params={"q": q})
+    return api_get_many("/ventas/pedido", params={"q": q})
 
 
 @mcp.tool()
@@ -185,7 +219,8 @@ def crear_pedido(empresa_id: str, cliente: dict, lineas: list[dict]) -> dict:
         cliente: Datos del cliente (mismos formatos que crear_presupuesto)
         lineas: Lista de líneas [{"articulo_id": "...", "cantidad": N}, ...]
     """
-    body: dict = {"empresa_id": empresa_id, "cliente": cliente, "lineas": lineas}
+    body: dict = {"empresa_id": empresa_id,
+                  "cliente": cliente, "lineas": lineas}
     return api_post("/ventas/pedido", body=body)
 
 
@@ -206,7 +241,7 @@ def buscar_albaran(pagina: int = 1, limite: int = 100, cliente_id: str | None = 
     if cliente_id:
         filtro.append(["cliente_id", "=", cliente_id])
     q = build_query(filtro or None, pagina=pagina, limite=limite)
-    return api_get("/ventas/albaran", params={"q": q})
+    return api_get_many("/ventas/albaran", params={"q": q})
 
 
 # ── Facturas ──────────────────────────────────────────────────────────────
@@ -226,7 +261,7 @@ def buscar_factura(pagina: int = 1, limite: int = 100, cliente_id: str | None = 
     if cliente_id:
         filtro.append(["cliente_id", "=", cliente_id])
     q = build_query(filtro or None, pagina=pagina, limite=limite)
-    return api_get("/ventas/factura", params={"q": q})
+    return api_get_many("/ventas/factura", params={"q": q})
 
 
 @mcp.tool()
@@ -237,7 +272,7 @@ def obtener_factura(factura_id: str) -> dict:
     Args:
         factura_id: ID de la factura
     """
-    return api_get(f"/ventas/factura/{factura_id}")
+    return api_get_one(f"/ventas/factura/{factura_id}")
 
 
 @mcp.tool()
@@ -250,7 +285,8 @@ def crear_factura(empresa_id: str, cliente: dict, lineas: list[dict]) -> dict:
         cliente: Datos del cliente (mismos formatos que crear_presupuesto)
         lineas: Lista de líneas [{"articulo_id": "...", "cantidad": N}, ...]
     """
-    body: dict = {"empresa_id": empresa_id, "cliente": cliente, "lineas": lineas}
+    body: dict = {"empresa_id": empresa_id,
+                  "cliente": cliente, "lineas": lineas}
     return api_post("/ventas/factura", body=body)
 
 

@@ -1,5 +1,5 @@
 from server import mcp
-from client import api_get, build_query
+from client import api_get_many, api_get_one, build_query
 
 
 @mcp.tool()
@@ -16,7 +16,7 @@ def buscar_recibo(factura_id: str | None = None, pagina: int = 1, limite: int = 
     if factura_id:
         filtro.append(["factura_id", "=", factura_id])
     q = build_query(filtro or None, pagina=pagina, limite=limite)
-    return api_get("/tesoreria/recibo_venta", params={"q": q})
+    return api_get_many("/tesoreria/recibo_venta", params={"q": q})
 
 
 @mcp.tool()
@@ -27,4 +27,4 @@ def obtener_recibo(recibo_id: str) -> dict:
     Args:
         recibo_id: ID del recibo
     """
-    return api_get(f"/tesoreria/recibo_venta/{recibo_id}")
+    return api_get_one(f"/tesoreria/recibo_venta/{recibo_id}")

@@ -1,5 +1,5 @@
 from server import mcp
-from client import api_get, build_query
+from client import api_get_one, api_get_many, build_query
 
 
 @mcp.tool()
@@ -16,7 +16,7 @@ def buscar_proveedor(nombre: str | None = None, pagina: int = 1, limite: int = 1
     if nombre:
         filtro.append(["nombre", "~", nombre])
     q = build_query(filtro or None, pagina=pagina, limite=limite)
-    return api_get("/compras/proveedor", params={"q": q})
+    return api_get_many("/compras/proveedor", params={"q": q})
 
 
 @mcp.tool()
@@ -27,4 +27,4 @@ def obtener_proveedor(proveedor_id: str) -> dict:
     Args:
         proveedor_id: ID del proveedor
     """
-    return api_get(f"/compras/proveedor/{proveedor_id}")
+    return api_get_one(f"/compras/proveedor/{proveedor_id}")

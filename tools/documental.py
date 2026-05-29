@@ -1,5 +1,5 @@
 from server import mcp
-from client import api_get, api_put
+from client import api_get_one, api_put
 
 
 @mcp.tool()
@@ -10,7 +10,7 @@ def obtener_documento_por_codigo(codigo: str) -> dict:
     Args:
         codigo: Código del documento
     """
-    return api_get(f"/documental/documento/contenido_por_codigo/{codigo}")
+    return api_get_one(f"/documental/documento/contenido_por_codigo/{codigo}")
 
 
 @mcp.tool()

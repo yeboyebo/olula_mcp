@@ -1,5 +1,5 @@
 from server import mcp
-from client import api_get, api_post, api_patch, build_query
+from client import api_get_one, api_get_many, api_post, api_patch, build_query
 
 
 # ── Ventas TPV ────────────────────────────────────────────────────────────
@@ -15,7 +15,7 @@ def buscar_venta_tpv(pagina: int = 1, limite: int = 100) -> list[dict]:
         limite: Resultados por página (máximo 100)
     """
     q = build_query(pagina=pagina, limite=limite)
-    return api_get("/tpv/venta", params={"q": q})
+    return api_get_many("/tpv/venta", params={"q": q})
 
 
 @mcp.tool()

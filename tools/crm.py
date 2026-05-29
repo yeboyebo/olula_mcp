@@ -1,5 +1,5 @@
 from server import mcp
-from client import api_get, api_post, api_patch, build_query
+from client import api_get_one, api_get_many, api_post, api_patch, build_query
 
 
 # ── Leads ─────────────────────────────────────────────────────────────────
@@ -22,7 +22,7 @@ def buscar_lead(nombre: str | None = None, estado_id: str | None = None, pagina:
     if estado_id:
         filtro.append(["estado_id", "=", estado_id])
     q = build_query(filtro or None, pagina=pagina, limite=limite)
-    return api_get("/crm/lead", params={"q": q})
+    return api_get_many("/crm/lead", params={"q": q})
 
 
 @mcp.tool()
@@ -93,7 +93,7 @@ def buscar_contacto(nombre: str | None = None, email: str | None = None, pagina:
     if email:
         filtro.append(["email", "~", email])
     q = build_query(filtro or None, pagina=pagina, limite=limite)
-    return api_get("/crm/contacto", params={"q": q})
+    return api_get_many("/crm/contacto", params={"q": q})
 
 
 @mcp.tool()
@@ -137,7 +137,7 @@ def buscar_oportunidad_venta(descripcion: str | None = None, estado_id: str | No
     if estado_id:
         filtro.append(["estado_id", "=", estado_id])
     q = build_query(filtro or None, pagina=pagina, limite=limite)
-    return api_get("/crm/oportunidad_venta", params={"q": q})
+    return api_get_many("/crm/oportunidad_venta", params={"q": q})
 
 
 @mcp.tool()
@@ -153,7 +153,8 @@ def crear_oportunidad_venta(descripcion: str, nombre_cliente: str, importe: floa
         cliente_id: ID del cliente (opcional)
         agente_id: ID del agente comercial
     """
-    body: dict = {"descripcion": descripcion, "nombre_cliente": nombre_cliente, "importe": importe, "estado_id": estado_id}
+    body: dict = {"descripcion": descripcion, "nombre_cliente": nombre_cliente,
+                  "importe": importe, "estado_id": estado_id}
     if cliente_id:
         body["cliente_id"] = cliente_id
     if agente_id:
@@ -181,7 +182,7 @@ def buscar_incidencia(nombre: str | None = None, estado: str | None = None, pagi
     if estado:
         filtro.append(["estado", "=", estado])
     q = build_query(filtro or None, pagina=pagina, limite=limite)
-    return api_get("/crm/incidencia", params={"q": q})
+    return api_get_many("/crm/incidencia", params={"q": q})
 
 
 @mcp.tool()
@@ -195,7 +196,8 @@ def crear_incidencia(nombre: str, descripcion: str, prioridad: str = "media", cl
         prioridad: Prioridad (alta, media, baja)
         cliente_id: ID del cliente asociado
     """
-    body: dict = {"nombre": nombre, "descripcion": descripcion, "prioridad": prioridad}
+    body: dict = {"nombre": nombre,
+                  "descripcion": descripcion, "prioridad": prioridad}
     if cliente_id:
         body["cliente_id"] = cliente_id
     return api_post("/crm/incidencia", body=body)
@@ -221,4 +223,4 @@ def buscar_accion(descripcion: str | None = None, estado: str | None = None, pag
     if estado:
         filtro.append(["estado", "=", estado])
     q = build_query(filtro or None, pagina=pagina, limite=limite)
-    return api_get("/crm/accion", params={"q": q})
+    return api_get_many("/crm/accion", params={"q": q})

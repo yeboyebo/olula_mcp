@@ -1,5 +1,5 @@
 from server import mcp
-from client import api_get, api_post, build_query
+from client import api_get_one, api_get_many, api_post, build_query
 
 
 # ── Artículos ─────────────────────────────────────────────────────────────
@@ -22,7 +22,7 @@ def buscar_articulo(descripcion: str | None = None, sku: str | None = None, pagi
     if sku:
         filtro.append(["id", "~", sku])
     q = build_query(filtro or None, pagina=pagina, limite=limite)
-    return api_get("/almacen/articulo", params={"q": q})
+    return api_get_many("/almacen/articulo", params={"q": q})
 
 
 @mcp.tool()
@@ -33,7 +33,7 @@ def obtener_articulo(articulo_id: str) -> dict:
     Args:
         articulo_id: ID del artículo
     """
-    return api_get(f"/almacen/articulo/{articulo_id}")
+    return api_get_one(f"/almacen/articulo/{articulo_id}")
 
 
 @mcp.tool()
@@ -46,7 +46,7 @@ def buscar_tags_articulo(pagina: int = 1, limite: int = 100) -> list[dict]:
         limite: Resultados por página (máximo 100)
     """
     q = build_query(pagina=pagina, limite=limite)
-    return api_get("/ventas/articulo/tags", params={"q": q})
+    return api_get_many("/ventas/articulo/tags", params={"q": q})
 
 
 # ── Stocks ────────────────────────────────────────────────────────────────
@@ -69,7 +69,7 @@ def buscar_stock(articulo_id: str | None = None, almacen_id: str | None = None, 
     if almacen_id:
         filtro.append(["almacen_id", "=", almacen_id])
     q = build_query(filtro or None, pagina=pagina, limite=limite)
-    return api_get("/almacen/stock", params={"q": q})
+    return api_get_many("/almacen/stock", params={"q": q})
 
 
 @mcp.tool()
@@ -80,7 +80,7 @@ def obtener_stock(stock_id: str) -> dict:
     Args:
         stock_id: ID del registro de stock
     """
-    return api_get(f"/almacen/stock/{stock_id}")
+    return api_get_one(f"/almacen/stock/{stock_id}")
 
 
 # ── Almacenes ─────────────────────────────────────────────────────────────
@@ -100,7 +100,7 @@ def buscar_almacen(nombre: str | None = None, pagina: int = 1, limite: int = 100
     if nombre:
         filtro.append(["nombre", "~", nombre])
     q = build_query(filtro or None, pagina=pagina, limite=limite)
-    return api_get("/almacen/almacen", params={"q": q})
+    return api_get_many("/almacen/almacen", params={"q": q})
 
 
 # ── Familias ──────────────────────────────────────────────────────────────
@@ -120,7 +120,7 @@ def buscar_familia(descripcion: str | None = None, pagina: int = 1, limite: int 
     if descripcion:
         filtro.append(["descripcion", "~", descripcion])
     q = build_query(filtro or None, pagina=pagina, limite=limite)
-    return api_get("/almacen/familia", params={"q": q})
+    return api_get_many("/almacen/familia", params={"q": q})
 
 
 # ── Transferencias ────────────────────────────────────────────────────────
