@@ -5,9 +5,9 @@ from client import api_get_one, api_get_many, api_post, build_query
 # ── Artículos ─────────────────────────────────────────────────────────────
 
 
+"""
 @mcp.tool()
 def buscar_articulo(descripcion: str | None = None, sku: str | None = None, pagina: int = 1, limite: int = 100) -> list[dict]:
-    """
     Busca artículos por descripción y/o SKU.
 
     Args:
@@ -15,7 +15,7 @@ def buscar_articulo(descripcion: str | None = None, sku: str | None = None, pagi
         sku: Filtrar por SKU (parcial)
         pagina: Número de página
         limite: Resultados por página (máximo 100)
-    """
+
     filtro = []
     if descripcion:
         filtro.append(["descripcion", "~", descripcion])
@@ -24,7 +24,7 @@ def buscar_articulo(descripcion: str | None = None, sku: str | None = None, pagi
     q = build_query(filtro or None, pagina=pagina, limite=limite)
     return api_get_many("/almacen/articulo", params={"q": q})
 
-
+"""
 @mcp.tool()
 def obtener_articulo(articulo_id: str) -> dict:
     """
