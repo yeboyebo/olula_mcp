@@ -32,18 +32,16 @@ def _headers() -> dict:
         if incoming:
             auth_header = incoming.get("authorization")
 
-    # 3. Transformar Bearer a X-Api-Key para el WebService
-    token: str | None = None
+    # 3. Reenviar la cabecera Authorization TAL CUAL al WebService.
+    # Cuando quien llama al MCP es nuestro propio backend (p.ej. el asistente IA),
+    # el Authorization que llega ya es un Bearer de sesión válido contra ese mismo
+    # backend — no hay que transformarlo. Solo cuando no llega ninguna Authorization
+    # (llamada sin usuario detrás) se usa la API Key fija configurada, enviada como
+    # X-Api-Key.
     if auth_header:
-        if auth_header.lower().startswith("bearer "):
-            token = auth_header[7:]
-        else:
-            token = auth_header
+        result["Authorization"] = auth_header
     elif API_KEY:
-        token = API_KEY
-
-    if token:
-        result["Authorization"] = f"X-Api-Key {token}"
+        result["Authorization"] = f"X-Api-Key {API_KEY}"
 
     return result
 
