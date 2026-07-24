@@ -134,7 +134,12 @@ def actualizar_cliente(cliente_id: str, nombre: str | None = None, email: str | 
 
 
 @mcp.tool()
-def buscar_presupuesto(pagina: int = 1, limite: int = 100, cliente_id: str | None = None) -> list[dict]:
+def buscar_presupuesto(
+    pagina: int = 1, limite: int = 100, cliente_id: str | None = None,
+    fecha_desde: str | None = None, fecha_hasta: str | None = None,
+    codigo: str | None = None, total_minimo: float | None = None,
+    total_maximo: float | None = None, aprobado: bool | None = None,
+) -> list[dict]:
     """
     Busca presupuestos de venta. Devuelve una lista de presupuestos.
 
@@ -142,10 +147,32 @@ def buscar_presupuesto(pagina: int = 1, limite: int = 100, cliente_id: str | Non
         pagina: Número de página (empieza en 1)
         limite: Resultados por página (máximo 100)
         cliente_id: Filtrar por ID de cliente
+        fecha_desde: Filtrar desde esta fecha, inclusive (formato YYYY-MM-DD)
+        fecha_hasta: Filtrar hasta esta fecha, inclusive (formato YYYY-MM-DD)
+        codigo: Filtrar por número/código de presupuesto (coincidencia parcial, p. ej.
+            "0001" encuentra "PRESUPUESTO-0001") — usa esto cuando el usuario
+            mencione el número de un presupuesto concreto
+        total_minimo: Filtrar presupuestos con importe total igual o superior
+        total_maximo: Filtrar presupuestos con importe total igual o inferior
+        aprobado: Filtrar por si el presupuesto ya ha sido aprobado (convertido en
+            pedido) o no
     """
     filtro = []
     if cliente_id:
         filtro.append(["cliente_id", "=", cliente_id])
+    if fecha_desde:
+        filtro.append(["fecha", ">=", fecha_desde])
+    if fecha_hasta:
+        filtro.append(["fecha", "<=", fecha_hasta])
+    if codigo:
+        filtro.append(["codigo", "~", codigo])
+    if total_minimo is not None:
+        filtro.append(["total", ">=", total_minimo])
+    if total_maximo is not None:
+        filtro.append(["total", "<=", total_maximo])
+    if aprobado is not None:
+        # "aprobado" de cara al usuario es lo inverso de la columna real "editable"
+        filtro.append(["editable", "=", not aprobado])
     q = build_query(filtro or None, pagina=pagina, limite=limite)
     return api_get_many("/ventas/presupuesto", params={"q": q})
 
@@ -193,7 +220,12 @@ def aprobar_presupuesto(presupuesto_id: str) -> dict:
 
 
 @mcp.tool()
-def buscar_pedido(pagina: int = 1, limite: int = 100, cliente_id: str | None = None) -> list[dict]:
+def buscar_pedido(
+    pagina: int = 1, limite: int = 100, cliente_id: str | None = None,
+    fecha_desde: str | None = None, fecha_hasta: str | None = None,
+    codigo: str | None = None, total_minimo: float | None = None,
+    total_maximo: float | None = None, estado_servido: str | None = None,
+) -> list[dict]:
     """
     Busca pedidos de venta.
 
@@ -201,12 +233,46 @@ def buscar_pedido(pagina: int = 1, limite: int = 100, cliente_id: str | None = N
         pagina: Número de página (empieza en 1)
         limite: Resultados por página (máximo 100)
         cliente_id: Filtrar por ID de cliente
+        fecha_desde: Filtrar desde esta fecha, inclusive (formato YYYY-MM-DD)
+        fecha_hasta: Filtrar hasta esta fecha, inclusive (formato YYYY-MM-DD)
+        codigo: Filtrar por número/código de pedido (coincidencia parcial, p. ej.
+            "0001" encuentra "PEDIDO-0001") — usa esto cuando el usuario mencione el
+            número de un pedido concreto
+        total_minimo: Filtrar pedidos con importe total igual o superior
+        total_maximo: Filtrar pedidos con importe total igual o inferior
+        estado_servido: Filtrar por estado de entrega — uno de "pendiente", "parcial"
+            o "total"
     """
     filtro = []
     if cliente_id:
         filtro.append(["cliente_id", "=", cliente_id])
+    if fecha_desde:
+        filtro.append(["fecha", ">=", fecha_desde])
+    if fecha_hasta:
+        filtro.append(["fecha", "<=", fecha_hasta])
+    if codigo:
+        filtro.append(["codigo", "~", codigo])
+    if total_minimo is not None:
+        filtro.append(["total", ">=", total_minimo])
+    if total_maximo is not None:
+        filtro.append(["total", "<=", total_maximo])
+    if estado_servido:
+        # La columna real solo acepta los literales en español usados por la app
+        valores_servido = {"pendiente": "No", "parcial": "Parcial", "total": "Sí"}
+        filtro.append(["servido", "=", valores_servido.get(estado_servido.strip().lower(), estado_servido)])
     q = build_query(filtro or None, pagina=pagina, limite=limite)
     return api_get_many("/ventas/pedido", params={"q": q})
+
+
+@mcp.tool()
+def obtener_pedido(pedido_id: str) -> dict:
+    """
+    Obtiene un pedido por su ID.
+
+    Args:
+        pedido_id: ID del pedido
+    """
+    return api_get_one(f"/ventas/pedido/{pedido_id}")
 
 
 @mcp.tool()
@@ -228,7 +294,12 @@ def crear_pedido(empresa_id: str, cliente: dict, lineas: list[dict]) -> dict:
 
 
 @mcp.tool()
-def buscar_albaran(pagina: int = 1, limite: int = 100, cliente_id: str | None = None) -> list[dict]:
+def buscar_albaran(
+    pagina: int = 1, limite: int = 100, cliente_id: str | None = None,
+    fecha_desde: str | None = None, fecha_hasta: str | None = None,
+    codigo: str | None = None, total_minimo: float | None = None,
+    total_maximo: float | None = None, facturado: bool | None = None,
+) -> list[dict]:
     """
     Busca albaranes de venta.
 
@@ -236,30 +307,85 @@ def buscar_albaran(pagina: int = 1, limite: int = 100, cliente_id: str | None = 
         pagina: Número de página
         limite: Resultados por página (máximo 100)
         cliente_id: Filtrar por ID de cliente
+        fecha_desde: Filtrar desde esta fecha, inclusive (formato YYYY-MM-DD)
+        fecha_hasta: Filtrar hasta esta fecha, inclusive (formato YYYY-MM-DD)
+        codigo: Filtrar por número/código de albarán (coincidencia parcial, p. ej.
+            "0001" encuentra "ALBARAN-0001") — usa esto cuando el usuario mencione el
+            número de un albarán concreto
+        total_minimo: Filtrar albaranes con importe total igual o superior
+        total_maximo: Filtrar albaranes con importe total igual o inferior
+        facturado: Filtrar por si el albarán ya ha sido facturado o no
     """
     filtro = []
     if cliente_id:
         filtro.append(["cliente_id", "=", cliente_id])
+    if fecha_desde:
+        filtro.append(["fecha", ">=", fecha_desde])
+    if fecha_hasta:
+        filtro.append(["fecha", "<=", fecha_hasta])
+    if codigo:
+        filtro.append(["codigo", "~", codigo])
+    if total_minimo is not None:
+        filtro.append(["total", ">=", total_minimo])
+    if total_maximo is not None:
+        filtro.append(["total", "<=", total_maximo])
+    if facturado is not None:
+        filtro.append(["facturado", "=", facturado])
     q = build_query(filtro or None, pagina=pagina, limite=limite)
     return api_get_many("/ventas/albaran", params={"q": q})
+
+
+@mcp.tool()
+def obtener_albaran(albaran_id: str) -> dict:
+    """
+    Obtiene un albarán por su ID.
+
+    Args:
+        albaran_id: ID del albarán
+    """
+    return api_get_one(f"/ventas/albaran/{albaran_id}")
 
 
 # ── Facturas ──────────────────────────────────────────────────────────────
 
 
 @mcp.tool()
-def buscar_factura(pagina: int = 1, limite: int = 100, cliente_id: str | None = None) -> list[dict]:
+def buscar_factura(
+    pagina: int = 1, limite: int = 100, cliente_id: str | None = None,
+    fecha_desde: str | None = None, fecha_hasta: str | None = None,
+    codigo: str | None = None, total_minimo: float | None = None,
+    total_maximo: float | None = None,
+) -> list[dict]:
     """
-    Busca facturas de venta.
+    Busca facturas de venta. Para preguntas agregadas por periodo ("total facturado
+    en 2025"), usa fecha_desde/fecha_hasta para filtrar en el servidor en vez de traer
+    todo el histórico.
 
     Args:
         pagina: Número de página
         limite: Resultados por página (máximo 100)
         cliente_id: Filtrar por ID de cliente
+        fecha_desde: Filtrar desde esta fecha, inclusive (formato YYYY-MM-DD)
+        fecha_hasta: Filtrar hasta esta fecha, inclusive (formato YYYY-MM-DD)
+        codigo: Filtrar por número/código de factura (coincidencia parcial, p. ej.
+            "00123" encuentra "F2026-00123") — usa esto cuando el usuario mencione el
+            número de una factura concreta
+        total_minimo: Filtrar facturas con importe total igual o superior
+        total_maximo: Filtrar facturas con importe total igual o inferior
     """
     filtro = []
     if cliente_id:
         filtro.append(["cliente_id", "=", cliente_id])
+    if fecha_desde:
+        filtro.append(["fecha", ">=", fecha_desde])
+    if fecha_hasta:
+        filtro.append(["fecha", "<=", fecha_hasta])
+    if codigo:
+        filtro.append(["codigo", "~", codigo])
+    if total_minimo is not None:
+        filtro.append(["total", ">=", total_minimo])
+    if total_maximo is not None:
+        filtro.append(["total", "<=", total_maximo])
     q = build_query(filtro or None, pagina=pagina, limite=limite)
     return api_get_many("/ventas/factura", params={"q": q})
 
