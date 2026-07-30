@@ -1,5 +1,7 @@
+import calendar
 import json
 from contextvars import ContextVar
+from datetime import date, timedelta
 
 import requests
 
@@ -67,6 +69,36 @@ def api_get_many(path: str, params: dict | None = None) -> list[dict]:
     return result
 
 
+def api_get_pagina(path: str, params: dict, pagina: int, limite: int) -> dict:
+    """
+    Como api_get_many, pero para endpoints paginados: conserva el total de
+    resultados que la API calcula junto a la página, en vez de descartarlo.
+
+    El backend solo calcula el total real en la página 1 (en el resto de
+    páginas devuelve -1 por coste de la consulta COUNT); por eso aquí se
+    normaliza a None fuera de la página 1 en lugar de propagar el -1, que
+    induciría a error a quien lo lea.
+    """
+    response = requests.get(f"{API_HOST}{path}", params=params, headers=_headers())
+    response.raise_for_status()
+    data = response.json()
+    if not isinstance(data, dict) or "datos" not in data:
+        raise ValueError(f"Expected paginated dict response from {path}, got {type(data).__name__}")
+
+    resultados = data["datos"]
+    total = data.get("total")
+    if pagina != 1 or total is None or total < 0:
+        total = None
+
+    return {
+        "resultados": resultados,
+        "pagina": pagina,
+        "limite": limite,
+        "total": total,
+        "hay_mas_resultados": len(resultados) == limite,
+    }
+
+
 def api_post(path: str, body: dict | None = None) -> dict:
     response = requests.post(f"{API_HOST}{path}", json=body, headers=_headers())
     response.raise_for_status()
@@ -104,3 +136,94 @@ def build_query(filtro: list | None = None, orden: list | None = None, pagina: i
     if orden:
         q["orden"] = orden
     return json.dumps(q, ensure_ascii=False, separators=(",", ":"))
+
+
+_CACHE_CAMPOS_FILTRABLES: dict[str, set[str]] = {}
+
+
+def campos_filtrables(recurso: str) -> set[str]:
+    """
+    Campos por los que de verdad se puede filtrar `recurso` (p. ej. "ventas/cliente"),
+    según el catálogo real del backend (GET /comun/campos_filtrables) — cacheado en
+    memoria del proceso tras la primera consulta por recurso, ya que el esquema de
+    campos filtrables no cambia en caliente.
+    """
+    if recurso not in _CACHE_CAMPOS_FILTRABLES:
+        data = api_get("/comun/campos_filtrables", params={"recurso": recurso})
+        if not isinstance(data, dict) or "campos" not in data:
+            raise ValueError(f"Respuesta inesperada de /comun/campos_filtrables para {recurso!r}")
+        _CACHE_CAMPOS_FILTRABLES[recurso] = set(data["campos"])
+    return _CACHE_CAMPOS_FILTRABLES[recurso]
+
+
+def clausulas_de_filtro_dinamico(recurso: str, filtro: dict[str, str] | None) -> list:
+    """
+    Traduce un filtro dinámico {campo: valor} (igualdad exacta) en cláusulas
+    [campo, "=", valor], validando cada campo contra campos_filtrables(recurso).
+    Lanza ValueError con la lista de campos válidos si alguno no existe, en vez de
+    dejarlo llegar tal cual al backend — que no valida nombres de campo
+    desconocidos: en el mejor caso falla con un error de SQL, en el peor arma una
+    columna sin comprobar a partir de un string que viene de un LLM.
+    """
+    if not filtro:
+        return []
+    validos = campos_filtrables(recurso)
+    desconocidos = sorted(set(filtro) - validos)
+    if desconocidos:
+        raise ValueError(
+            f"Campo(s) no filtrable(s) para {recurso}: {', '.join(desconocidos)}. "
+            f"Campos válidos: {', '.join(sorted(validos))}"
+        )
+    return [[campo, "=", valor] for campo, valor in filtro.items()]
+
+
+def clausula_or_texto(campos: list[str], texto: str) -> dict:
+    """
+    Cláusula OR que busca `texto` (contiene, case-insensitive) en cualquiera de
+    `campos`. Útil cuando quien pregunta no sabe en qué campo concreto está el
+    dato (p. ej. "busca a Pérez" sin saber si es el nombre o el email).
+    """
+    return {"or": [[campo, "~", texto] for campo in campos]}
+
+
+PERIODOS_VALIDOS = (
+    "hoy", "ayer", "mañana",
+    "esta_semana", "semana_anterior", "semana_siguiente",
+    "este_mes", "mes_anterior", "mes_siguiente",
+    "este_año", "año_anterior", "año_siguiente",
+)
+
+
+def resolver_periodo(periodo: str) -> tuple[str, str]:
+    """
+    Traduce un atajo de periodo relativo a la fecha de hoy en un rango
+    (desde, hasta) en formato YYYY-MM-DD. Replica en el servidor los atajos
+    de fecha que ya existen en el frontend (rangoDesdeAtajo, packages/lib/src/infraestructura.ts),
+    para que el agente de IA no tenga que calcular fechas absolutas a mano.
+    """
+    hoy = date.today()
+
+    if periodo == "hoy":
+        desde = hasta = hoy
+    elif periodo == "ayer":
+        desde = hasta = hoy - timedelta(days=1)
+    elif periodo == "mañana":
+        desde = hasta = hoy + timedelta(days=1)
+    elif periodo in ("esta_semana", "semana_anterior", "semana_siguiente"):
+        offset_dias = {"esta_semana": 0, "semana_anterior": -7, "semana_siguiente": 7}[periodo]
+        lunes = hoy - timedelta(days=hoy.isoweekday() - 1) + timedelta(days=offset_dias)
+        desde, hasta = lunes, lunes + timedelta(days=6)
+    elif periodo in ("este_mes", "mes_anterior", "mes_siguiente"):
+        offset_meses = {"este_mes": 0, "mes_anterior": -1, "mes_siguiente": 1}[periodo]
+        mes_absoluto = hoy.month - 1 + offset_meses
+        anio, mes = hoy.year + mes_absoluto // 12, mes_absoluto % 12 + 1
+        desde = date(anio, mes, 1)
+        hasta = date(anio, mes, calendar.monthrange(anio, mes)[1])
+    elif periodo in ("este_año", "año_anterior", "año_siguiente"):
+        offset_anios = {"este_año": 0, "año_anterior": -1, "año_siguiente": 1}[periodo]
+        anio = hoy.year + offset_anios
+        desde, hasta = date(anio, 1, 1), date(anio, 12, 31)
+    else:
+        raise ValueError(f"Periodo no reconocido: {periodo!r}. Valores válidos: {', '.join(PERIODOS_VALIDOS)}")
+
+    return desde.isoformat(), hasta.isoformat()

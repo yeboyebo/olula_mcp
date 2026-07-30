@@ -1,27 +1,49 @@
 from server import mcp
-from client import api_get_one, api_get_many, api_post, api_patch, build_query
+from client import (
+    api_get_one, api_get_pagina, api_post, api_patch, build_query,
+    clausula_or_texto, clausulas_de_filtro_dinamico, resolver_periodo,
+)
 
 
-# ── Clientes ──────────────────────────────────────────────────────────────
+# ── Artículos ─────────────────────────────────────────────────────────────
 
 @mcp.tool()
-def buscar_articulo(descripcion: str | None = None, sku: str | None = None, pagina: int = 1, limite: int = 100) -> list[dict]:
+def buscar_articulo(
+    descripcion: str | None = None, sku: str | None = None, texto: str | None = None,
+    filtro_extra: dict[str, str] | None = None, pagina: int = 1, limite: int = 100,
+) -> dict:
     """
     Busca artículos por descripción y/o SKU.
 
     Args:
         descripcion: Filtrar por descripción (parcial)
         sku: Filtrar por SKU (parcial)
+        texto: Búsqueda libre — encuentra el texto en descripción O SKU a la
+            vez. Úsalo cuando no sepas de antemano si lo que busca el usuario
+            es la descripción o el código.
+        filtro_extra: Filtro EXACTO por cualquier otro campo del artículo que no
+            esté arriba (p. ej. {"familia_id": "..."}). Usa el nombre de campo
+            que mejor describa el dato — si no es válido, la tool falla con la
+            lista de campos válidos para que puedas reintentar con uno de esos.
         pagina: Número de página
         limite: Resultados por página (máximo 100)
+
+    Returns:
+        {"resultados": [...], "pagina": N, "limite": N, "total": N|None,
+        "hay_mas_resultados": bool}. "total" solo viene relleno en la página 1
+        (el backend no recalcula el conteo en el resto de páginas); usa
+        "hay_mas_resultados" para saber si conviene pedir la siguiente página.
     """
     filtro = []
     if descripcion:
         filtro.append(["descripcion", "~", descripcion])
     if sku:
         filtro.append(["id", "~", sku])
+    if texto:
+        filtro.append(clausula_or_texto(["descripcion", "id"], texto))
+    filtro.extend(clausulas_de_filtro_dinamico("ventas/articulo", filtro_extra))
     q = build_query(filtro or None, pagina=pagina, limite=limite)
-    return api_get_many("/ventas/articulo", params={"q": q})
+    return api_get_pagina("/ventas/articulo", params={"q": q}, pagina=pagina, limite=limite)
 
 
 @mcp.tool()
@@ -38,23 +60,44 @@ def obtener_articulo(articulo_id: str) -> dict:
 
 
 @mcp.tool()
-def buscar_cliente(nombre: str | None = None, email: str | None = None, pagina: int = 1, limite: int = 100) -> list[dict]:
+def buscar_cliente(
+    nombre: str | None = None, email: str | None = None, texto: str | None = None,
+    filtro_extra: dict[str, str] | None = None, pagina: int = 1, limite: int = 100,
+) -> dict:
     """
     Busca clientes por nombre y/o email. Devuelve una lista de clientes.
 
     Args:
         nombre: Filtrar por nombre (parcial, case-insensitive)
         email: Filtrar por email
+        texto: Búsqueda libre — encuentra el texto en nombre O email a la vez.
+            Úsalo cuando no sepas de antemano si lo que te ha dado el usuario
+            es un nombre o un email.
+        filtro_extra: Filtro EXACTO por cualquier otro dato preciso de
+            identificación que el usuario haya dado y que no sea nombre/email
+            (p. ej. {"id_fiscal": "74510345M"} para CIF/NIF, {"telefono1": "..."}
+            para teléfono). Úsalo SIEMPRE que tengas un dato exacto como este en
+            vez de meterlo en `texto`/`nombre` — evita una búsqueda difusa que
+            puede devolver homónimos sin incluir siquiera al cliente correcto. Si
+            el campo no es válido, la tool falla con la lista de campos válidos.
         pagina: Número de página (empieza en 1)
         limite: Resultados por página (máximo 100)
+
+    Returns:
+        {"resultados": [...], "pagina": N, "limite": N, "total": N|None,
+        "hay_mas_resultados": bool}. "total" solo viene relleno en la página 1;
+        usa "hay_mas_resultados" para saber si conviene pedir la siguiente página.
     """
     filtro = []
     if nombre:
         filtro.append(["nombre", "~", nombre])
     if email:
         filtro.append(["email", "~", email])
+    if texto:
+        filtro.append(clausula_or_texto(["nombre", "email"], texto))
+    filtro.extend(clausulas_de_filtro_dinamico("ventas/cliente", filtro_extra))
     q = build_query(filtro or None, pagina=pagina, limite=limite)
-    return api_get_many("/ventas/cliente", params={"q": q})
+    return api_get_pagina("/ventas/cliente", params={"q": q}, pagina=pagina, limite=limite)
 
 
 @mcp.tool()
@@ -130,16 +173,50 @@ def actualizar_cliente(cliente_id: str, nombre: str | None = None, email: str | 
     return api_patch(f"/ventas/cliente/{cliente_id}", body=body)
 
 
+# ── Ayudas comunes de fecha/orden para documentos de venta ─────────────────
+
+_ORDENES_DOCUMENTO_VENTA = {
+    "fecha_asc": ["fecha", "ASC"],
+    "fecha_desc": ["fecha", "DESC"],
+    "total_asc": ["total", "ASC"],
+    "total_desc": ["total", "DESC"],
+    "codigo_asc": ["codigo", "ASC"],
+    "codigo_desc": ["codigo", "DESC"],
+}
+
+
+def _resolver_orden_documento_venta(orden: str | None) -> list:
+    if orden is None:
+        return _ORDENES_DOCUMENTO_VENTA["fecha_desc"]
+    clave = orden.strip().lower()
+    if clave not in _ORDENES_DOCUMENTO_VENTA:
+        raise ValueError(
+            f"orden no reconocido: {orden!r}. Valores válidos: {', '.join(_ORDENES_DOCUMENTO_VENTA)}"
+        )
+    return _ORDENES_DOCUMENTO_VENTA[clave]
+
+
+def _aplicar_periodo(filtro: list, campo_fecha: str, periodo: str | None, fecha_desde: str | None, fecha_hasta: str | None) -> tuple[str | None, str | None]:
+    if periodo and not fecha_desde and not fecha_hasta:
+        fecha_desde, fecha_hasta = resolver_periodo(periodo)
+    if fecha_desde:
+        filtro.append([campo_fecha, ">=", fecha_desde])
+    if fecha_hasta:
+        filtro.append([campo_fecha, "<=", fecha_hasta])
+    return fecha_desde, fecha_hasta
+
+
 # ── Presupuestos ──────────────────────────────────────────────────────────
 
 
 @mcp.tool()
 def buscar_presupuesto(
     pagina: int = 1, limite: int = 100, cliente_id: str | None = None,
-    fecha_desde: str | None = None, fecha_hasta: str | None = None,
+    fecha_desde: str | None = None, fecha_hasta: str | None = None, periodo: str | None = None,
     codigo: str | None = None, total_minimo: float | None = None,
-    total_maximo: float | None = None, aprobado: bool | None = None,
-) -> list[dict]:
+    total_maximo: float | None = None, aprobado: bool | None = None, orden: str | None = None,
+    filtro_extra: dict[str, str] | None = None,
+) -> dict:
     """
     Busca presupuestos de venta. Devuelve una lista de presupuestos.
 
@@ -156,14 +233,27 @@ def buscar_presupuesto(
         total_maximo: Filtrar presupuestos con importe total igual o inferior
         aprobado: Filtrar por si el presupuesto ya ha sido aprobado (convertido en
             pedido) o no
+        periodo: Atajo de fecha relativo a hoy en vez de fecha_desde/fecha_hasta —
+            uno de: hoy, ayer, mañana, esta_semana, semana_anterior, semana_siguiente,
+            este_mes, mes_anterior, mes_siguiente, este_año, año_anterior, año_siguiente.
+            Se ignora si ya pasas fecha_desde o fecha_hasta explícitas.
+        orden: Orden de los resultados — uno de: fecha_asc, fecha_desc, total_asc,
+            total_desc, codigo_asc, codigo_desc. Por defecto "fecha_desc" (los más
+            recientes primero), para que preguntas como "el último presupuesto de
+            este cliente" no dependan de que esté entre los primeros de una página
+            sin ordenar.
+        filtro_extra: Filtro EXACTO por cualquier otro campo que no esté arriba.
+            Si el campo no es válido, la tool falla con la lista de campos válidos.
+
+    Returns:
+        {"resultados": [...], "pagina": N, "limite": N, "total": N|None,
+        "hay_mas_resultados": bool}. "total" solo viene relleno en la página 1;
+        usa "hay_mas_resultados" para saber si conviene pedir la siguiente página.
     """
     filtro = []
     if cliente_id:
         filtro.append(["cliente_id", "=", cliente_id])
-    if fecha_desde:
-        filtro.append(["fecha", ">=", fecha_desde])
-    if fecha_hasta:
-        filtro.append(["fecha", "<=", fecha_hasta])
+    _aplicar_periodo(filtro, "fecha", periodo, fecha_desde, fecha_hasta)
     if codigo:
         filtro.append(["codigo", "~", codigo])
     if total_minimo is not None:
@@ -173,8 +263,9 @@ def buscar_presupuesto(
     if aprobado is not None:
         # "aprobado" de cara al usuario es lo inverso de la columna real "editable"
         filtro.append(["editable", "=", not aprobado])
-    q = build_query(filtro or None, pagina=pagina, limite=limite)
-    return api_get_many("/ventas/presupuesto", params={"q": q})
+    filtro.extend(clausulas_de_filtro_dinamico("ventas/presupuesto", filtro_extra))
+    q = build_query(filtro or None, orden=_resolver_orden_documento_venta(orden), pagina=pagina, limite=limite)
+    return api_get_pagina("/ventas/presupuesto", params={"q": q}, pagina=pagina, limite=limite)
 
 
 @mcp.tool()
@@ -222,10 +313,11 @@ def aprobar_presupuesto(presupuesto_id: str) -> dict:
 @mcp.tool()
 def buscar_pedido(
     pagina: int = 1, limite: int = 100, cliente_id: str | None = None,
-    fecha_desde: str | None = None, fecha_hasta: str | None = None,
+    fecha_desde: str | None = None, fecha_hasta: str | None = None, periodo: str | None = None,
     codigo: str | None = None, total_minimo: float | None = None,
-    total_maximo: float | None = None, estado_servido: str | None = None,
-) -> list[dict]:
+    total_maximo: float | None = None, estado_servido: str | None = None, orden: str | None = None,
+    filtro_extra: dict[str, str] | None = None,
+) -> dict:
     """
     Busca pedidos de venta.
 
@@ -242,14 +334,27 @@ def buscar_pedido(
         total_maximo: Filtrar pedidos con importe total igual o inferior
         estado_servido: Filtrar por estado de entrega — uno de "pendiente", "parcial"
             o "total"
+        periodo: Atajo de fecha relativo a hoy en vez de fecha_desde/fecha_hasta —
+            uno de: hoy, ayer, mañana, esta_semana, semana_anterior, semana_siguiente,
+            este_mes, mes_anterior, mes_siguiente, este_año, año_anterior, año_siguiente.
+            Se ignora si ya pasas fecha_desde o fecha_hasta explícitas.
+        orden: Orden de los resultados — uno de: fecha_asc, fecha_desc, total_asc,
+            total_desc, codigo_asc, codigo_desc. Por defecto "fecha_desc" (los más
+            recientes primero), para que preguntas como "el último pedido de este
+            cliente" no dependan de que esté entre los primeros de una página sin
+            ordenar.
+        filtro_extra: Filtro EXACTO por cualquier otro campo que no esté arriba.
+            Si el campo no es válido, la tool falla con la lista de campos válidos.
+
+    Returns:
+        {"resultados": [...], "pagina": N, "limite": N, "total": N|None,
+        "hay_mas_resultados": bool}. "total" solo viene relleno en la página 1;
+        usa "hay_mas_resultados" para saber si conviene pedir la siguiente página.
     """
     filtro = []
     if cliente_id:
         filtro.append(["cliente_id", "=", cliente_id])
-    if fecha_desde:
-        filtro.append(["fecha", ">=", fecha_desde])
-    if fecha_hasta:
-        filtro.append(["fecha", "<=", fecha_hasta])
+    _aplicar_periodo(filtro, "fecha", periodo, fecha_desde, fecha_hasta)
     if codigo:
         filtro.append(["codigo", "~", codigo])
     if total_minimo is not None:
@@ -260,8 +365,9 @@ def buscar_pedido(
         # La columna real solo acepta los literales en español usados por la app
         valores_servido = {"pendiente": "No", "parcial": "Parcial", "total": "Sí"}
         filtro.append(["servido", "=", valores_servido.get(estado_servido.strip().lower(), estado_servido)])
-    q = build_query(filtro or None, pagina=pagina, limite=limite)
-    return api_get_many("/ventas/pedido", params={"q": q})
+    filtro.extend(clausulas_de_filtro_dinamico("ventas/pedido", filtro_extra))
+    q = build_query(filtro or None, orden=_resolver_orden_documento_venta(orden), pagina=pagina, limite=limite)
+    return api_get_pagina("/ventas/pedido", params={"q": q}, pagina=pagina, limite=limite)
 
 
 @mcp.tool()
@@ -296,10 +402,11 @@ def crear_pedido(empresa_id: str, cliente: dict, lineas: list[dict]) -> dict:
 @mcp.tool()
 def buscar_albaran(
     pagina: int = 1, limite: int = 100, cliente_id: str | None = None,
-    fecha_desde: str | None = None, fecha_hasta: str | None = None,
+    fecha_desde: str | None = None, fecha_hasta: str | None = None, periodo: str | None = None,
     codigo: str | None = None, total_minimo: float | None = None,
-    total_maximo: float | None = None, facturado: bool | None = None,
-) -> list[dict]:
+    total_maximo: float | None = None, facturado: bool | None = None, orden: str | None = None,
+    filtro_extra: dict[str, str] | None = None,
+) -> dict:
     """
     Busca albaranes de venta.
 
@@ -315,14 +422,25 @@ def buscar_albaran(
         total_minimo: Filtrar albaranes con importe total igual o superior
         total_maximo: Filtrar albaranes con importe total igual o inferior
         facturado: Filtrar por si el albarán ya ha sido facturado o no
+        periodo: Atajo de fecha relativo a hoy en vez de fecha_desde/fecha_hasta —
+            uno de: hoy, ayer, mañana, esta_semana, semana_anterior, semana_siguiente,
+            este_mes, mes_anterior, mes_siguiente, este_año, año_anterior, año_siguiente.
+            Se ignora si ya pasas fecha_desde o fecha_hasta explícitas.
+        orden: Orden de los resultados — uno de: fecha_asc, fecha_desc, total_asc,
+            total_desc, codigo_asc, codigo_desc. Por defecto "fecha_desc" (los más
+            recientes primero).
+        filtro_extra: Filtro EXACTO por cualquier otro campo que no esté arriba.
+            Si el campo no es válido, la tool falla con la lista de campos válidos.
+
+    Returns:
+        {"resultados": [...], "pagina": N, "limite": N, "total": N|None,
+        "hay_mas_resultados": bool}. "total" solo viene relleno en la página 1;
+        usa "hay_mas_resultados" para saber si conviene pedir la siguiente página.
     """
     filtro = []
     if cliente_id:
         filtro.append(["cliente_id", "=", cliente_id])
-    if fecha_desde:
-        filtro.append(["fecha", ">=", fecha_desde])
-    if fecha_hasta:
-        filtro.append(["fecha", "<=", fecha_hasta])
+    _aplicar_periodo(filtro, "fecha", periodo, fecha_desde, fecha_hasta)
     if codigo:
         filtro.append(["codigo", "~", codigo])
     if total_minimo is not None:
@@ -331,8 +449,9 @@ def buscar_albaran(
         filtro.append(["total", "<=", total_maximo])
     if facturado is not None:
         filtro.append(["facturado", "=", facturado])
-    q = build_query(filtro or None, pagina=pagina, limite=limite)
-    return api_get_many("/ventas/albaran", params={"q": q})
+    filtro.extend(clausulas_de_filtro_dinamico("ventas/albaran", filtro_extra))
+    q = build_query(filtro or None, orden=_resolver_orden_documento_venta(orden), pagina=pagina, limite=limite)
+    return api_get_pagina("/ventas/albaran", params={"q": q}, pagina=pagina, limite=limite)
 
 
 @mcp.tool()
@@ -352,14 +471,15 @@ def obtener_albaran(albaran_id: str) -> dict:
 @mcp.tool()
 def buscar_factura(
     pagina: int = 1, limite: int = 100, cliente_id: str | None = None,
-    fecha_desde: str | None = None, fecha_hasta: str | None = None,
+    fecha_desde: str | None = None, fecha_hasta: str | None = None, periodo: str | None = None,
     codigo: str | None = None, total_minimo: float | None = None,
-    total_maximo: float | None = None,
-) -> list[dict]:
+    total_maximo: float | None = None, orden: str | None = None,
+    filtro_extra: dict[str, str] | None = None,
+) -> dict:
     """
     Busca facturas de venta. Para preguntas agregadas por periodo ("total facturado
-    en 2025"), usa fecha_desde/fecha_hasta para filtrar en el servidor en vez de traer
-    todo el histórico.
+    en 2025"), usa fecha_desde/fecha_hasta o periodo para filtrar en el servidor en
+    vez de traer todo el histórico.
 
     Args:
         pagina: Número de página
@@ -372,22 +492,35 @@ def buscar_factura(
             número de una factura concreta
         total_minimo: Filtrar facturas con importe total igual o superior
         total_maximo: Filtrar facturas con importe total igual o inferior
+        periodo: Atajo de fecha relativo a hoy en vez de fecha_desde/fecha_hasta —
+            uno de: hoy, ayer, mañana, esta_semana, semana_anterior, semana_siguiente,
+            este_mes, mes_anterior, mes_siguiente, este_año, año_anterior, año_siguiente.
+            Se ignora si ya pasas fecha_desde o fecha_hasta explícitas.
+        orden: Orden de los resultados — uno de: fecha_asc, fecha_desc, total_asc,
+            total_desc, codigo_asc, codigo_desc. Por defecto "fecha_desc" (las más
+            recientes primero).
+        filtro_extra: Filtro EXACTO por cualquier otro campo que no esté arriba
+            (p. ej. {"id_fiscal": "..."} para el CIF/NIF del cliente). Si el campo
+            no es válido, la tool falla con la lista de campos válidos.
+
+    Returns:
+        {"resultados": [...], "pagina": N, "limite": N, "total": N|None,
+        "hay_mas_resultados": bool}. "total" solo viene relleno en la página 1;
+        usa "hay_mas_resultados" para saber si conviene pedir la siguiente página.
     """
     filtro = []
     if cliente_id:
         filtro.append(["cliente_id", "=", cliente_id])
-    if fecha_desde:
-        filtro.append(["fecha", ">=", fecha_desde])
-    if fecha_hasta:
-        filtro.append(["fecha", "<=", fecha_hasta])
+    _aplicar_periodo(filtro, "fecha", periodo, fecha_desde, fecha_hasta)
     if codigo:
         filtro.append(["codigo", "~", codigo])
     if total_minimo is not None:
         filtro.append(["total", ">=", total_minimo])
     if total_maximo is not None:
         filtro.append(["total", "<=", total_maximo])
-    q = build_query(filtro or None, pagina=pagina, limite=limite)
-    return api_get_many("/ventas/factura", params={"q": q})
+    filtro.extend(clausulas_de_filtro_dinamico("ventas/factura", filtro_extra))
+    q = build_query(filtro or None, orden=_resolver_orden_documento_venta(orden), pagina=pagina, limite=limite)
+    return api_get_pagina("/ventas/factura", params={"q": q}, pagina=pagina, limite=limite)
 
 
 @mcp.tool()
