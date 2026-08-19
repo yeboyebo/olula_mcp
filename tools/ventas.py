@@ -36,11 +36,14 @@ def buscar_articulo(
     """
     filtro = []
     if descripcion:
-        filtro.append(["descripcion", "~", descripcion])
+        # El campo filtrable real es "nombre" (así lo expone dict_criteria de
+        # ventas/articulo en el backend), aunque el campo de RESPUESTA del artículo
+        # se llame "descripcion" — filtrar por "descripcion" nunca casaba con nada.
+        filtro.append(["nombre", "~", descripcion])
     if sku:
         filtro.append(["id", "~", sku])
     if texto:
-        filtro.append(clausula_or_texto(["descripcion", "id"], texto))
+        filtro.append(clausula_or_texto(["nombre", "id"], texto))
     filtro.extend(clausulas_de_filtro_dinamico("ventas/articulo", filtro_extra))
     q = build_query(filtro or None, pagina=pagina, limite=limite)
     return api_get_pagina("/ventas/articulo", params={"q": q}, pagina=pagina, limite=limite)
