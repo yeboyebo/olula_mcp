@@ -1,3 +1,4 @@
+from typing import TypedDict
 from server import mcp
 from client import (
     api_get_one, api_get_pagina, api_post, api_patch, build_query,
@@ -44,7 +45,8 @@ def buscar_articulo(
         filtro.append(["id", "~", sku])
     if texto:
         filtro.append(clausula_or_texto(["nombre", "id"], texto))
-    filtro.extend(clausulas_de_filtro_dinamico("ventas/articulo", filtro_extra))
+    filtro.extend(clausulas_de_filtro_dinamico(
+        "ventas/articulo", filtro_extra))
     q = build_query(filtro or None, pagina=pagina, limite=limite)
     return api_get_pagina("/ventas/articulo", params={"q": q}, pagina=pagina, limite=limite)
 
@@ -266,8 +268,10 @@ def buscar_presupuesto(
     if aprobado is not None:
         # "aprobado" de cara al usuario es lo inverso de la columna real "editable"
         filtro.append(["editable", "=", not aprobado])
-    filtro.extend(clausulas_de_filtro_dinamico("ventas/presupuesto", filtro_extra))
-    q = build_query(filtro or None, orden=_resolver_orden_documento_venta(orden), pagina=pagina, limite=limite)
+    filtro.extend(clausulas_de_filtro_dinamico(
+        "ventas/presupuesto", filtro_extra))
+    q = build_query(filtro or None, orden=_resolver_orden_documento_venta(
+        orden), pagina=pagina, limite=limite)
     return api_get_pagina("/ventas/presupuesto", params={"q": q}, pagina=pagina, limite=limite)
 
 
@@ -366,10 +370,13 @@ def buscar_pedido(
         filtro.append(["total", "<=", total_maximo])
     if estado_servido:
         # La columna real solo acepta los literales en español usados por la app
-        valores_servido = {"pendiente": "No", "parcial": "Parcial", "total": "Sí"}
-        filtro.append(["servido", "=", valores_servido.get(estado_servido.strip().lower(), estado_servido)])
+        valores_servido = {"pendiente": "No",
+                           "parcial": "Parcial", "total": "Sí"}
+        filtro.append(["servido", "=", valores_servido.get(
+            estado_servido.strip().lower(), estado_servido)])
     filtro.extend(clausulas_de_filtro_dinamico("ventas/pedido", filtro_extra))
-    q = build_query(filtro or None, orden=_resolver_orden_documento_venta(orden), pagina=pagina, limite=limite)
+    q = build_query(filtro or None, orden=_resolver_orden_documento_venta(
+        orden), pagina=pagina, limite=limite)
     return api_get_pagina("/ventas/pedido", params={"q": q}, pagina=pagina, limite=limite)
 
 
@@ -384,18 +391,36 @@ def obtener_pedido(pedido_id: str) -> dict:
     return api_get_one(f"/ventas/pedido/{pedido_id}")
 
 
+class ArticuloLinea(TypedDict):
+    articulo_id: str
+
+
+class ClientePedido(TypedDict):
+    cliente_id: str
+
+
+class LineaPedido(TypedDict):
+    articulo: ArticuloLinea
+    cantidad: float
+
+
 @mcp.tool()
-def crear_pedido(empresa_id: str, cliente: dict, lineas: list[dict]) -> dict:
+def crear_pedido(empresa_id: str, cliente: ClientePedido, lineas: list[LineaPedido]) -> dict:
     """
     Crea un pedido de venta.
 
     Args:
         empresa_id: ID de la empresa
         cliente: Datos del cliente (mismos formatos que crear_presupuesto)
-        lineas: Lista de líneas [{"articulo_id": "...", "cantidad": N}, ...]
+        lineas: Lista de líneas [{
+            "articulo": { "articulo_id": "REFERENCIA"},
+            "cantidad": N
+        }, ...]
     """
     body: dict = {"empresa_id": empresa_id,
                   "cliente": cliente, "lineas": lineas}
+
+    print("BODY:", body)  # Debugging line to check the body content
     return api_post("/ventas/pedido", body=body)
 
 
@@ -453,7 +478,8 @@ def buscar_albaran(
     if facturado is not None:
         filtro.append(["facturado", "=", facturado])
     filtro.extend(clausulas_de_filtro_dinamico("ventas/albaran", filtro_extra))
-    q = build_query(filtro or None, orden=_resolver_orden_documento_venta(orden), pagina=pagina, limite=limite)
+    q = build_query(filtro or None, orden=_resolver_orden_documento_venta(
+        orden), pagina=pagina, limite=limite)
     return api_get_pagina("/ventas/albaran", params={"q": q}, pagina=pagina, limite=limite)
 
 
@@ -522,7 +548,8 @@ def buscar_factura(
     if total_maximo is not None:
         filtro.append(["total", "<=", total_maximo])
     filtro.extend(clausulas_de_filtro_dinamico("ventas/factura", filtro_extra))
-    q = build_query(filtro or None, orden=_resolver_orden_documento_venta(orden), pagina=pagina, limite=limite)
+    q = build_query(filtro or None, orden=_resolver_orden_documento_venta(
+        orden), pagina=pagina, limite=limite)
     return api_get_pagina("/ventas/factura", params={"q": q}, pagina=pagina, limite=limite)
 
 
