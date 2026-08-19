@@ -101,6 +101,8 @@ def api_get_pagina(path: str, params: dict, pagina: int, limite: int) -> dict:
 
 def api_post(path: str, body: dict | None = None) -> dict:
     response = requests.post(f"{API_HOST}{path}", json=body, headers=_headers())
+    if not response.ok:
+        print(f"[api_post] Error {response.status_code} en {path}: {response.text}")
     response.raise_for_status()
     data = response.json()
     return data.get("datos", data)
