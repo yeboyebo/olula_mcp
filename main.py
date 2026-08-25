@@ -1,4 +1,5 @@
 import os
+import asyncio
 import contextlib
 import argparse
 
@@ -9,7 +10,7 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 import uvicorn
 
 from server import mcp
-from client import set_request_headers
+from client import aclose_client, set_request_headers
 
 
 class AuthForwardMiddleware:
@@ -56,9 +57,14 @@ def _build_http_app() -> ASGIApp:
 
     @contextlib.asynccontextmanager
     async def lifespan(app: Starlette):
-        if mcp._session_manager:
-            async with mcp._session_manager.run():
+        try:
+            if mcp._session_manager:
+                async with mcp._session_manager.run():
+                    yield
+            else:
                 yield
+        finally:
+            await aclose_client()
 
     routes = [
         Route("/health", _health_handler, methods=["GET"]),
@@ -87,7 +93,10 @@ def main():
     args = parser.parse_args()
 
     if args.transport == "stdio":
-        mcp.run(transport="stdio")
+        try:
+            mcp.run(transport="stdio")
+        finally:
+            asyncio.run(aclose_client())
     else:
         host = args.host or mcp.settings.host
         port = args.port or mcp.settings.port

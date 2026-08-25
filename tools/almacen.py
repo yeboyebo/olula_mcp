@@ -1,3 +1,5 @@
+from typing import TypedDict
+
 from server import mcp
 from client import api_get_one, api_get_pagina, api_post, build_query, clausulas_de_filtro_dinamico
 
@@ -7,7 +9,7 @@ from client import api_get_one, api_get_pagina, api_post, build_query, clausulas
 
 """
 @mcp.tool()
-def buscar_articulo(descripcion: str | None = None, sku: str | None = None, pagina: int = 1, limite: int = 100) -> list[dict]:
+async def buscar_articulo(descripcion: str | None = None, sku: str | None = None, pagina: int = 1, limite: int = 100) -> list[dict]:
     Busca artículos por descripción y/o SKU.
 
     Args:
@@ -22,11 +24,11 @@ def buscar_articulo(descripcion: str | None = None, sku: str | None = None, pagi
     if sku:
         filtro.append(["id", "~", sku])
     q = build_query(filtro or None, pagina=pagina, limite=limite)
-    return api_get_many("/almacen/articulo", params={"q": q})
+    return await api_get_many("/almacen/articulo", params={"q": q})
 
 """
 @mcp.tool()
-def obtener_articulo_almacen(articulo_id: str) -> dict:
+async def obtener_articulo_almacen(articulo_id: str) -> dict:
     """
     Obtiene un artículo por su ID/SKU desde el endpoint de almacén
     (/almacen/articulo). Para los datos comerciales del artículo (precio,
@@ -35,11 +37,11 @@ def obtener_articulo_almacen(articulo_id: str) -> dict:
     Args:
         articulo_id: ID del artículo
     """
-    return api_get_one(f"/almacen/articulo/{articulo_id}")
+    return await api_get_one(f"/almacen/articulo/{articulo_id}")
 
 
 @mcp.tool()
-def buscar_tags_articulo(pagina: int = 1, limite: int = 100) -> dict:
+async def buscar_tags_articulo(pagina: int = 1, limite: int = 100) -> dict:
     """
     Busca tags de artículos (referencias con precio e IVA).
 
@@ -53,14 +55,14 @@ def buscar_tags_articulo(pagina: int = 1, limite: int = 100) -> dict:
         usa "hay_mas_resultados" para saber si conviene pedir la siguiente página.
     """
     q = build_query(pagina=pagina, limite=limite)
-    return api_get_pagina("/ventas/articulo/tags", params={"q": q}, pagina=pagina, limite=limite)
+    return await api_get_pagina("/ventas/articulo/tags", params={"q": q}, pagina=pagina, limite=limite)
 
 
 # ── Stocks ────────────────────────────────────────────────────────────────
 
 
 @mcp.tool()
-def buscar_stock(
+async def buscar_stock(
     articulo_id: str | None = None, almacen_id: str | None = None,
     filtro_extra: dict[str, str] | None = None, pagina: int = 1, limite: int = 100,
 ) -> dict:
@@ -85,27 +87,27 @@ def buscar_stock(
         filtro.append(["articulo_id", "=", articulo_id])
     if almacen_id:
         filtro.append(["almacen_id", "=", almacen_id])
-    filtro.extend(clausulas_de_filtro_dinamico("almacen/stock", filtro_extra))
+    filtro.extend(await clausulas_de_filtro_dinamico("almacen/stock", filtro_extra))
     q = build_query(filtro or None, pagina=pagina, limite=limite)
-    return api_get_pagina("/almacen/stock", params={"q": q}, pagina=pagina, limite=limite)
+    return await api_get_pagina("/almacen/stock", params={"q": q}, pagina=pagina, limite=limite)
 
 
 @mcp.tool()
-def obtener_stock(stock_id: str) -> dict:
+async def obtener_stock(stock_id: str) -> dict:
     """
     Obtiene un registro de stock por su ID.
 
     Args:
         stock_id: ID del registro de stock
     """
-    return api_get_one(f"/almacen/stock/{stock_id}")
+    return await api_get_one(f"/almacen/stock/{stock_id}")
 
 
 # ── Almacenes ─────────────────────────────────────────────────────────────
 
 
 @mcp.tool()
-def buscar_almacen(
+async def buscar_almacen(
     nombre: str | None = None, filtro_extra: dict[str, str] | None = None,
     pagina: int = 1, limite: int = 100,
 ) -> dict:
@@ -127,16 +129,16 @@ def buscar_almacen(
     filtro = []
     if nombre:
         filtro.append(["nombre", "~", nombre])
-    filtro.extend(clausulas_de_filtro_dinamico("almacen/almacen", filtro_extra))
+    filtro.extend(await clausulas_de_filtro_dinamico("almacen/almacen", filtro_extra))
     q = build_query(filtro or None, pagina=pagina, limite=limite)
-    return api_get_pagina("/almacen/almacen", params={"q": q}, pagina=pagina, limite=limite)
+    return await api_get_pagina("/almacen/almacen", params={"q": q}, pagina=pagina, limite=limite)
 
 
 # ── Familias ──────────────────────────────────────────────────────────────
 
 
 @mcp.tool()
-def buscar_familia(
+async def buscar_familia(
     descripcion: str | None = None, filtro_extra: dict[str, str] | None = None,
     pagina: int = 1, limite: int = 100,
 ) -> dict:
@@ -158,16 +160,21 @@ def buscar_familia(
     filtro = []
     if descripcion:
         filtro.append(["descripcion", "~", descripcion])
-    filtro.extend(clausulas_de_filtro_dinamico("almacen/familia", filtro_extra))
+    filtro.extend(await clausulas_de_filtro_dinamico("almacen/familia", filtro_extra))
     q = build_query(filtro or None, pagina=pagina, limite=limite)
-    return api_get_pagina("/almacen/familia", params={"q": q}, pagina=pagina, limite=limite)
+    return await api_get_pagina("/almacen/familia", params={"q": q}, pagina=pagina, limite=limite)
 
 
 # ── Transferencias ────────────────────────────────────────────────────────
 
 
+class LineaTransferencia(TypedDict):
+    sku: str
+    cantidad: float
+
+
 @mcp.tool()
-def crear_transferencia(almacen_origen_id: str, almacen_destino_id: str, lineas: list[dict]) -> dict:
+async def crear_transferencia(almacen_origen_id: str, almacen_destino_id: str, lineas: list[LineaTransferencia]) -> dict:
     """
     Crea una transferencia de stock entre almacenes.
 
@@ -181,4 +188,4 @@ def crear_transferencia(almacen_origen_id: str, almacen_destino_id: str, lineas:
         "almacen_destino_id": almacen_destino_id,
         "lineas": lineas,
     }
-    return api_post("/almacen/transferencia", body=body)
+    return await api_post("/almacen/transferencia", body=body)

@@ -3,6 +3,7 @@ from client import (
     api_get_one, api_get_pagina, api_post, api_patch, build_query,
     clausulas_de_filtro_dinamico, resolver_periodo,
 )
+from tools.tipos import ClienteRegistrado
 
 
 # ── Ventas TPV ────────────────────────────────────────────────────────────
@@ -29,7 +30,7 @@ def _resolver_orden_venta_tpv(orden: str | None) -> list:
 
 
 @mcp.tool()
-def buscar_venta_tpv(
+async def buscar_venta_tpv(
     pagina: int = 1, limite: int = 100, cliente_id: str | None = None,
     agente_id: str | None = None, punto_venta_id: str | None = None,
     fecha_desde: str | None = None, fecha_hasta: str | None = None, periodo: str | None = None,
@@ -79,13 +80,13 @@ def buscar_venta_tpv(
         filtro.append(["fecha", "<=", fecha_hasta])
     if codigo:
         filtro.append(["codigo", "~", codigo])
-    filtro.extend(clausulas_de_filtro_dinamico("tpv/venta", filtro_extra))
+    filtro.extend(await clausulas_de_filtro_dinamico("tpv/venta", filtro_extra))
     q = build_query(filtro or None, orden=_resolver_orden_venta_tpv(orden), pagina=pagina, limite=limite)
-    return api_get_pagina("/tpv/venta", params={"q": q}, pagina=pagina, limite=limite)
+    return await api_get_pagina("/tpv/venta", params={"q": q}, pagina=pagina, limite=limite)
 
 
 @mcp.tool()
-def crear_venta_tpv(agente_id: str, punto_venta_id: str, cliente: dict | None = None) -> dict:
+async def crear_venta_tpv(agente_id: str, punto_venta_id: str, cliente: ClienteRegistrado | None = None) -> dict:
     """
     Crea una nueva venta en el TPV.
 
@@ -97,11 +98,11 @@ def crear_venta_tpv(agente_id: str, punto_venta_id: str, cliente: dict | None = 
     body: dict = {"agente_id": agente_id, "punto_venta_id": punto_venta_id}
     if cliente:
         body["cliente"] = cliente
-    return api_post("/tpv/venta", body=body)
+    return await api_post("/tpv/venta", body=body)
 
 
 @mcp.tool()
-def agregar_linea_venta_tpv(venta_id: str, articulo_id: str, cantidad: float) -> dict:
+async def agregar_linea_venta_tpv(venta_id: str, articulo_id: str, cantidad: float) -> dict:
     """
     Agrega una línea de artículo a una venta TPV existente.
 
@@ -111,11 +112,11 @@ def agregar_linea_venta_tpv(venta_id: str, articulo_id: str, cantidad: float) ->
         cantidad: Cantidad
     """
     body = {"articulo_id": articulo_id, "cantidad": cantidad}
-    return api_post(f"/tpv/venta/{venta_id}/linea", body=body)
+    return await api_post(f"/tpv/venta/{venta_id}/linea", body=body)
 
 
 @mcp.tool()
-def agregar_linea_venta_tpv_barcode(venta_id: str, barcode: str, cantidad: float = 1) -> dict:
+async def agregar_linea_venta_tpv_barcode(venta_id: str, barcode: str, cantidad: float = 1) -> dict:
     """
     Agrega una línea a una venta TPV escaneando un código de barras.
 
@@ -125,11 +126,11 @@ def agregar_linea_venta_tpv_barcode(venta_id: str, barcode: str, cantidad: float
         cantidad: Cantidad (por defecto 1)
     """
     body = {"barcode": barcode, "cantidad": cantidad}
-    return api_post(f"/tpv/venta/{venta_id}/linea_por_barcode", body=body)
+    return await api_post(f"/tpv/venta/{venta_id}/linea_por_barcode", body=body)
 
 
 @mcp.tool()
-def agregar_pago_tpv(venta_id: str, importe: float, forma_pago: str, punto_venta_id: str | None = None, vale_id: str | None = None) -> dict:
+async def agregar_pago_tpv(venta_id: str, importe: float, forma_pago: str, punto_venta_id: str | None = None, vale_id: str | None = None) -> dict:
     """
     Agrega un pago a una venta TPV.
 
@@ -145,25 +146,25 @@ def agregar_pago_tpv(venta_id: str, importe: float, forma_pago: str, punto_venta
         body["punto_venta_id"] = punto_venta_id
     if vale_id:
         body["vale_id"] = vale_id
-    return api_post(f"/tpv/venta/{venta_id}/pago", body=body)
+    return await api_post(f"/tpv/venta/{venta_id}/pago", body=body)
 
 
 @mcp.tool()
-def emitir_venta_tpv(venta_id: str) -> dict:
+async def emitir_venta_tpv(venta_id: str) -> dict:
     """
     Emite/finaliza una venta TPV.
 
     Args:
         venta_id: ID de la venta a emitir
     """
-    return api_patch(f"/tpv/venta/{venta_id}/emitir")
+    return await api_patch(f"/tpv/venta/{venta_id}/emitir")
 
 
 # ── Arqueos ───────────────────────────────────────────────────────────────
 
 
 @mcp.tool()
-def crear_arqueo(punto_venta_id: str, agente_id: str) -> dict:
+async def crear_arqueo(punto_venta_id: str, agente_id: str) -> dict:
     """
     Crea un nuevo arqueo de caja (apertura).
 
@@ -172,11 +173,11 @@ def crear_arqueo(punto_venta_id: str, agente_id: str) -> dict:
         agente_id: ID del agente que abre la caja
     """
     body = {"punto_venta_id": punto_venta_id, "agente_id": agente_id}
-    return api_post("/tpv/arqueo", body=body)
+    return await api_post("/tpv/arqueo", body=body)
 
 
 @mcp.tool()
-def cerrar_arqueo(arqueo_id: str, agente_id: str, movimiento_cierre: float) -> dict:
+async def cerrar_arqueo(arqueo_id: str, agente_id: str, movimiento_cierre: float) -> dict:
     """
     Cierra un arqueo de caja.
 
@@ -186,4 +187,4 @@ def cerrar_arqueo(arqueo_id: str, agente_id: str, movimiento_cierre: float) -> d
         movimiento_cierre: Importe del movimiento de cierre
     """
     body = {"agente_id": agente_id, "movimiento_cierre": movimiento_cierre}
-    return api_patch(f"/tpv/arqueo/{arqueo_id}/cerrar", body=body)
+    return await api_patch(f"/tpv/arqueo/{arqueo_id}/cerrar", body=body)

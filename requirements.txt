@@ -1,6 +1,5 @@
 fastapi
 uvicorn[standard]
 fastmcp
-requests
-types-requests
+httpx
 python-dotenv

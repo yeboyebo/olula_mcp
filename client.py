@@ -3,11 +3,36 @@ import json
 from contextvars import ContextVar
 from datetime import date, timedelta
 
-import requests
+import httpx
 
 from config import API_HOST, API_KEY
 
 _request_headers: ContextVar[dict | None] = ContextVar("_request_headers", default=None)
+
+# Timeout explícito por fase: sin esto, una petición al backend que se queda
+# colgada (típicamente una consulta pesada de agregación) no falla nunca —
+# se queda esperando indefinidamente y el usuario ve "minutos sin respuesta"
+# en vez de un error rápido y reintentable.
+_TIMEOUT = httpx.Timeout(connect=5.0, read=30.0, write=10.0, pool=5.0)
+
+# Cliente HTTP compartido: reutiliza conexiones (keep-alive/pooling) en vez
+# de pagar un handshake TCP/TLS nuevo en cada llamada — se nota especialmente
+# en los flujos que paginan varias veces contra el mismo backend.
+_client: httpx.AsyncClient | None = None
+
+
+def _get_client() -> httpx.AsyncClient:
+    global _client
+    if _client is None:
+        _client = httpx.AsyncClient(base_url=API_HOST, timeout=_TIMEOUT)
+    return _client
+
+
+async def aclose_client() -> None:
+    global _client
+    if _client is not None:
+        await _client.aclose()
+        _client = None
 
 
 def set_request_headers(headers: dict | None) -> None:
@@ -48,28 +73,28 @@ def _headers() -> dict:
     return result
 
 
-def api_get(path: str, params: dict | None = None) -> dict | list:
-    response = requests.get(f"{API_HOST}{path}", params=params, headers=_headers())
+async def api_get(path: str, params: dict | None = None) -> dict | list:
+    response = await _get_client().get(path, params=params, headers=_headers())
     response.raise_for_status()
     data = response.json()
     return data.get("datos", data)
 
 
-def api_get_one(path: str, params: dict | None = None) -> dict:
-    result = api_get(path, params)
+async def api_get_one(path: str, params: dict | None = None) -> dict:
+    result = await api_get(path, params)
     if not isinstance(result, dict):
         raise ValueError(f"Expected dict from {path}, got {type(result).__name__}")
     return result
 
 
-def api_get_many(path: str, params: dict | None = None) -> list[dict]:
-    result = api_get(path, params)
+async def api_get_many(path: str, params: dict | None = None) -> list[dict]:
+    result = await api_get(path, params)
     if not isinstance(result, list):
         raise ValueError(f"Expected list from {path}, got {type(result).__name__}")
     return result
 
 
-def api_get_pagina(path: str, params: dict, pagina: int, limite: int) -> dict:
+async def api_get_pagina(path: str, params: dict, pagina: int, limite: int) -> dict:
     """
     Como api_get_many, pero para endpoints paginados: conserva el total de
     resultados que la API calcula junto a la página, en vez de descartarlo.
@@ -79,7 +104,7 @@ def api_get_pagina(path: str, params: dict, pagina: int, limite: int) -> dict:
     normaliza a None fuera de la página 1 en lugar de propagar el -1, que
     induciría a error a quien lo lea.
     """
-    response = requests.get(f"{API_HOST}{path}", params=params, headers=_headers())
+    response = await _get_client().get(path, params=params, headers=_headers())
     response.raise_for_status()
     data = response.json()
     if not isinstance(data, dict) or "datos" not in data:
@@ -99,31 +124,31 @@ def api_get_pagina(path: str, params: dict, pagina: int, limite: int) -> dict:
     }
 
 
-def api_post(path: str, body: dict | None = None) -> dict:
-    response = requests.post(f"{API_HOST}{path}", json=body, headers=_headers())
-    if not response.ok:
+async def api_post(path: str, body: dict | None = None) -> dict:
+    response = await _get_client().post(path, json=body, headers=_headers())
+    if not response.is_success:
         print(f"[api_post] Error {response.status_code} en {path}: {response.text}")
     response.raise_for_status()
     data = response.json()
     return data.get("datos", data)
 
 
-def api_patch(path: str, body: dict | None = None) -> dict:
-    response = requests.patch(f"{API_HOST}{path}", json=body, headers=_headers())
+async def api_patch(path: str, body: dict | None = None) -> dict:
+    response = await _get_client().patch(path, json=body, headers=_headers())
     response.raise_for_status()
     data = response.json()
     return data.get("datos", data)
 
 
-def api_put(path: str, body: dict | None = None) -> dict:
-    response = requests.put(f"{API_HOST}{path}", json=body, headers=_headers())
+async def api_put(path: str, body: dict | None = None) -> dict:
+    response = await _get_client().put(path, json=body, headers=_headers())
     response.raise_for_status()
     data = response.json()
     return data.get("datos", data)
 
 
-def api_delete(path: str) -> dict | None:
-    response = requests.delete(f"{API_HOST}{path}", headers=_headers())
+async def api_delete(path: str) -> dict | None:
+    response = await _get_client().delete(path, headers=_headers())
     response.raise_for_status()
     if response.text:
         data = response.json()
@@ -143,7 +168,7 @@ def build_query(filtro: list | None = None, orden: list | None = None, pagina: i
 _CACHE_CAMPOS_FILTRABLES: dict[str, set[str]] = {}
 
 
-def campos_filtrables(recurso: str) -> set[str]:
+async def campos_filtrables(recurso: str) -> set[str]:
     """
     Campos por los que de verdad se puede filtrar `recurso` (p. ej. "ventas/cliente"),
     según el catálogo real del backend (GET /comun/campos_filtrables) — cacheado en
@@ -151,14 +176,14 @@ def campos_filtrables(recurso: str) -> set[str]:
     campos filtrables no cambia en caliente.
     """
     if recurso not in _CACHE_CAMPOS_FILTRABLES:
-        data = api_get("/comun/campos_filtrables", params={"recurso": recurso})
+        data = await api_get("/comun/campos_filtrables", params={"recurso": recurso})
         if not isinstance(data, dict) or "campos" not in data:
             raise ValueError(f"Respuesta inesperada de /comun/campos_filtrables para {recurso!r}")
         _CACHE_CAMPOS_FILTRABLES[recurso] = set(data["campos"])
     return _CACHE_CAMPOS_FILTRABLES[recurso]
 
 
-def clausulas_de_filtro_dinamico(recurso: str, filtro: dict[str, str] | None) -> list:
+async def clausulas_de_filtro_dinamico(recurso: str, filtro: dict[str, str] | None) -> list:
     """
     Traduce un filtro dinámico {campo: valor} (igualdad exacta) en cláusulas
     [campo, "=", valor], validando cada campo contra campos_filtrables(recurso).
@@ -169,7 +194,7 @@ def clausulas_de_filtro_dinamico(recurso: str, filtro: dict[str, str] | None) ->
     """
     if not filtro:
         return []
-    validos = campos_filtrables(recurso)
+    validos = await campos_filtrables(recurso)
     desconocidos = sorted(set(filtro) - validos)
     if desconocidos:
         raise ValueError(

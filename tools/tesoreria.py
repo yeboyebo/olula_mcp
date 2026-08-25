@@ -7,7 +7,7 @@ _ESTADOS_RECIBO = {"pendiente": "Emitido", "cobrado": "Pagado", "devuelto": "Dev
 
 
 @mcp.tool()
-def buscar_recibo(
+async def buscar_recibo(
     factura_id: str | None = None, cliente_id: str | None = None, estado: str | None = None,
     fecha_desde: str | None = None, fecha_hasta: str | None = None, periodo: str | None = None,
     filtro_extra: dict[str, str] | None = None, pagina: int = 1, limite: int = 100,
@@ -51,17 +51,17 @@ def buscar_recibo(
         filtro.append(["fecha_emision", ">=", fecha_desde])
     if fecha_hasta:
         filtro.append(["fecha_emision", "<=", fecha_hasta])
-    filtro.extend(clausulas_de_filtro_dinamico("tesoreria/recibo_venta", filtro_extra))
+    filtro.extend(await clausulas_de_filtro_dinamico("tesoreria/recibo_venta", filtro_extra))
     q = build_query(filtro or None, orden=["fecha_emision", "DESC"], pagina=pagina, limite=limite)
-    return api_get_pagina("/tesoreria/recibo_venta", params={"q": q}, pagina=pagina, limite=limite)
+    return await api_get_pagina("/tesoreria/recibo_venta", params={"q": q}, pagina=pagina, limite=limite)
 
 
 @mcp.tool()
-def obtener_recibo(recibo_id: str) -> dict:
+async def obtener_recibo(recibo_id: str) -> dict:
     """
     Obtiene un recibo por su ID.
 
     Args:
         recibo_id: ID del recibo
     """
-    return api_get_one(f"/tesoreria/recibo_venta/{recibo_id}")
+    return await api_get_one(f"/tesoreria/recibo_venta/{recibo_id}")

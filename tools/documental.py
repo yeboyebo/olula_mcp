@@ -3,18 +3,18 @@ from client import api_get_one, api_put
 
 
 @mcp.tool()
-def obtener_documento_por_codigo(codigo: str) -> dict:
+async def obtener_documento_por_codigo(codigo: str) -> dict:
     """
     Obtiene el contenido de un documento por su código.
 
     Args:
         codigo: Código del documento
     """
-    return api_get_one(f"/documental/documento/contenido_por_codigo/{codigo}")
+    return await api_get_one(f"/documental/documento/contenido_por_codigo/{codigo}")
 
 
 @mcp.tool()
-def subir_documento(documento_id: str, codigo: str, nombre: str, tipo: str, nombre_fichero: str, versiones: list[dict] | None = None) -> dict:
+async def subir_documento(documento_id: str, codigo: str, nombre: str, tipo: str, nombre_fichero: str, versiones: list[dict] | None = None) -> dict:
     """
     Crea o actualiza un documento en el sistema documental.
 
@@ -35,4 +35,4 @@ def subir_documento(documento_id: str, codigo: str, nombre: str, tipo: str, nomb
     }
     if versiones:
         body["versiones"] = versiones
-    return api_put(f"/documental/documento/{documento_id}", body=body)
+    return await api_put(f"/documental/documento/{documento_id}", body=body)

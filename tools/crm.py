@@ -9,7 +9,7 @@ from client import (
 
 
 @mcp.tool()
-def buscar_lead(
+async def buscar_lead(
     nombre: str | None = None, estado_id: str | None = None,
     filtro_extra: dict[str, str] | None = None, pagina: int = 1, limite: int = 100,
 ) -> dict:
@@ -34,13 +34,13 @@ def buscar_lead(
         filtro.append(["nombre", "~", nombre])
     if estado_id:
         filtro.append(["estado_id", "=", estado_id])
-    filtro.extend(clausulas_de_filtro_dinamico("crm/lead", filtro_extra))
+    filtro.extend(await clausulas_de_filtro_dinamico("crm/lead", filtro_extra))
     q = build_query(filtro or None, pagina=pagina, limite=limite)
-    return api_get_pagina("/crm/lead", params={"q": q}, pagina=pagina, limite=limite)
+    return await api_get_pagina("/crm/lead", params={"q": q}, pagina=pagina, limite=limite)
 
 
 @mcp.tool()
-def crear_lead(nombre: str, id_fiscal: str, tipo: str = "cliente", estado_id: str | None = None, responsable_id: str | None = None, email: str | None = None, telefono: str | None = None, fuente_id: str | None = None) -> dict:
+async def crear_lead(nombre: str, id_fiscal: str, tipo: str = "cliente", estado_id: str | None = None, responsable_id: str | None = None, email: str | None = None, telefono: str | None = None, fuente_id: str | None = None) -> dict:
     """
     Crea un nuevo lead (cliente potencial).
 
@@ -63,11 +63,11 @@ def crear_lead(nombre: str, id_fiscal: str, tipo: str = "cliente", estado_id: st
         body["email"] = email
     if fuente_id:
         body["fuente_id"] = fuente_id
-    return api_post("/crm/lead", body=body)
+    return await api_post("/crm/lead", body=body)
 
 
 @mcp.tool()
-def actualizar_lead(lead_id: str, nombre: str | None = None, email: str | None = None, estado_id: str | None = None) -> dict:
+async def actualizar_lead(lead_id: str, nombre: str | None = None, email: str | None = None, estado_id: str | None = None) -> dict:
     """
     Actualiza un lead existente.
 
@@ -84,14 +84,14 @@ def actualizar_lead(lead_id: str, nombre: str | None = None, email: str | None =
         body["email"] = email
     if estado_id:
         body["estado_id"] = estado_id
-    return api_patch(f"/crm/lead/{lead_id}", body=body)
+    return await api_patch(f"/crm/lead/{lead_id}", body=body)
 
 
 # ── Contactos ─────────────────────────────────────────────────────────────
 
 
 @mcp.tool()
-def buscar_contacto(
+async def buscar_contacto(
     nombre: str | None = None, email: str | None = None, texto: str | None = None,
     filtro_extra: dict[str, str] | None = None, pagina: int = 1, limite: int = 100,
 ) -> dict:
@@ -122,13 +122,13 @@ def buscar_contacto(
         filtro.append(["email", "~", email])
     if texto:
         filtro.append({"or": [["nombre", "~", texto], ["email", "~", texto]]})
-    filtro.extend(clausulas_de_filtro_dinamico("crm/contacto", filtro_extra))
+    filtro.extend(await clausulas_de_filtro_dinamico("crm/contacto", filtro_extra))
     q = build_query(filtro or None, pagina=pagina, limite=limite)
-    return api_get_pagina("/crm/contacto", params={"q": q}, pagina=pagina, limite=limite)
+    return await api_get_pagina("/crm/contacto", params={"q": q}, pagina=pagina, limite=limite)
 
 
 @mcp.tool()
-def crear_contacto(nombre: str, email: str | None = None, telefono1: str | None = None, nif: str | None = None) -> dict:
+async def crear_contacto(nombre: str, email: str | None = None, telefono1: str | None = None, nif: str | None = None) -> dict:
     """
     Crea un nuevo contacto.
 
@@ -145,14 +145,14 @@ def crear_contacto(nombre: str, email: str | None = None, telefono1: str | None 
         body["telefono1"] = telefono1
     if nif:
         body["nif"] = nif
-    return api_post("/crm/contacto", body=body)
+    return await api_post("/crm/contacto", body=body)
 
 
 # ── Oportunidades de venta ────────────────────────────────────────────────
 
 
 @mcp.tool()
-def buscar_oportunidad_venta(
+async def buscar_oportunidad_venta(
     descripcion: str | None = None, estado_id: str | None = None,
     filtro_extra: dict[str, str] | None = None, pagina: int = 1, limite: int = 100,
 ) -> dict:
@@ -178,13 +178,13 @@ def buscar_oportunidad_venta(
         filtro.append(["descripcion", "~", descripcion])
     if estado_id:
         filtro.append(["estado_id", "=", estado_id])
-    filtro.extend(clausulas_de_filtro_dinamico("crm/oportunidad_venta", filtro_extra))
+    filtro.extend(await clausulas_de_filtro_dinamico("crm/oportunidad_venta", filtro_extra))
     q = build_query(filtro or None, pagina=pagina, limite=limite)
-    return api_get_pagina("/crm/oportunidad_venta", params={"q": q}, pagina=pagina, limite=limite)
+    return await api_get_pagina("/crm/oportunidad_venta", params={"q": q}, pagina=pagina, limite=limite)
 
 
 @mcp.tool()
-def crear_oportunidad_venta(descripcion: str, nombre_cliente: str, importe: float, estado_id: str, cliente_id: str | None = None, agente_id: str | None = None) -> dict:
+async def crear_oportunidad_venta(descripcion: str, nombre_cliente: str, importe: float, estado_id: str, cliente_id: str | None = None, agente_id: str | None = None) -> dict:
     """
     Crea una nueva oportunidad de venta.
 
@@ -202,7 +202,7 @@ def crear_oportunidad_venta(descripcion: str, nombre_cliente: str, importe: floa
         body["cliente_id"] = cliente_id
     if agente_id:
         body["agente_id"] = agente_id
-    return api_post("/crm/oportunidad_venta", body=body)
+    return await api_post("/crm/oportunidad_venta", body=body)
 
 
 # ── Incidencias ───────────────────────────────────────────────────────────
@@ -222,7 +222,7 @@ _PRIORIDADES_INCIDENCIA = {"alta": "Alta", "media": "Media", "baja": "Baja"}
 
 
 @mcp.tool()
-def buscar_incidencia(
+async def buscar_incidencia(
     nombre: str | None = None, estado: str | None = None, prioridad: str | None = None,
     cliente_id: str | None = None, fecha_desde: str | None = None, fecha_hasta: str | None = None,
     periodo: str | None = None, filtro_extra: dict[str, str] | None = None,
@@ -269,13 +269,13 @@ def buscar_incidencia(
         filtro.append(["fecha", ">=", fecha_desde])
     if fecha_hasta:
         filtro.append(["fecha", "<=", fecha_hasta])
-    filtro.extend(clausulas_de_filtro_dinamico("crm/incidencia", filtro_extra))
+    filtro.extend(await clausulas_de_filtro_dinamico("crm/incidencia", filtro_extra))
     q = build_query(filtro or None, orden=["fecha", "DESC"], pagina=pagina, limite=limite)
-    return api_get_pagina("/crm/incidencia", params={"q": q}, pagina=pagina, limite=limite)
+    return await api_get_pagina("/crm/incidencia", params={"q": q}, pagina=pagina, limite=limite)
 
 
 @mcp.tool()
-def crear_incidencia(nombre: str, descripcion: str, prioridad: str = "media", cliente_id: str | None = None) -> dict:
+async def crear_incidencia(nombre: str, descripcion: str, prioridad: str = "media", cliente_id: str | None = None) -> dict:
     """
     Crea una nueva incidencia.
 
@@ -289,14 +289,14 @@ def crear_incidencia(nombre: str, descripcion: str, prioridad: str = "media", cl
                   "descripcion": descripcion, "prioridad": prioridad}
     if cliente_id:
         body["cliente_id"] = cliente_id
-    return api_post("/crm/incidencia", body=body)
+    return await api_post("/crm/incidencia", body=body)
 
 
 # ── Acciones CRM ──────────────────────────────────────────────────────────
 
 
 @mcp.tool()
-def buscar_accion(
+async def buscar_accion(
     descripcion: str | None = None, estado: str | None = None,
     filtro_extra: dict[str, str] | None = None, pagina: int = 1, limite: int = 100,
 ) -> dict:
@@ -321,6 +321,6 @@ def buscar_accion(
         filtro.append(["descripcion", "~", descripcion])
     if estado:
         filtro.append(["estado", "=", estado])
-    filtro.extend(clausulas_de_filtro_dinamico("crm/accion", filtro_extra))
+    filtro.extend(await clausulas_de_filtro_dinamico("crm/accion", filtro_extra))
     q = build_query(filtro or None, pagina=pagina, limite=limite)
-    return api_get_pagina("/crm/accion", params={"q": q}, pagina=pagina, limite=limite)
+    return await api_get_pagina("/crm/accion", params={"q": q}, pagina=pagina, limite=limite)
