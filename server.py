@@ -11,3 +11,4 @@ import tools.compras  # noqa: F401
 import tools.comun  # noqa: F401
 import tools.predicciones  # noqa: F401
 import tools.documental  # noqa: F401
+import tools.automatizacion  # noqa: F401
