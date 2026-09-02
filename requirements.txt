@@ -1,5 +1,6 @@
 fastapi
 uvicorn[standard]
-fastmcp
+fastmcp>=2.14,<3
+mcp>=1.24,<2
 httpx
 python-dotenv
